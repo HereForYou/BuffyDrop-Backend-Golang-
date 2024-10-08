@@ -2,33 +2,35 @@ package main
 
 import (
 	"fmt"
-	// "go-test/utils"
-	"github.com/gorilla/mux"
+
 	"go-test/config"
-	setting_router "go-test/routes/setting"
-	user_router "go-test/routes/user"
+	"go-test/db"
+	"go-test/routes/setting"
+	"go-test/routes/user"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
-// func helloHandler(w http.ResponseWriter, r *http.Request) {
-// 	fmt.Fprint(w, "Hello, world! This is Go test project!")
-// }
+type User struct {
+	UserName    string  `bson:"userName"`
+	TgId        string  `bson:"tgId"`
+	Email       string  `bson:"email"`
+	TotalPoints float32 `bson:"totalPoints"`
+}
 
 func main() {
+	// load configuration data from config package
 	cfg := config.LoadConfig()
 
-	userRouter := mux.NewRouter()
-	user_router.RegisterUserRoute(userRouter)
-	setting_router.RegisterUserRoute(userRouter)
+	//================================================================================== setting router
+	router := mux.NewRouter()
+	user_router.RegisterUserRoute(router)
+	setting_router.RegisterUserRoute(router)
+
+	//================================================================================== Connect to DB
+	db.Connect(cfg.DbUrl)
 
 	fmt.Println("Server is running on port: ", cfg.Port)
-	http.ListenAndServe(":"+cfg.Port, userRouter)
-	// var limit int
-	// utils.SayHello("SmartFox")
-	// fmt.Print("Enter a specific number: ")
-	// fmt.Scan(&limit)
-	// utils.FindEvens(limit)
-	// http.HandleFunc("/", helloHandler)
-	// fmt.Println("Server is running on port 8080!")
-	// http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(":"+cfg.Port, router)
 }
