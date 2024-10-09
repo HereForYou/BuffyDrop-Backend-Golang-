@@ -8,5 +8,7 @@ import (
 func RegisterUserRoute(r *mux.Router) {
 	userRouter := r.PathPrefix("/user").Subrouter()
 	userRouter.HandleFunc("/", user_controller.GetUser).Methods("GET")
+	userRouter.HandleFunc("/top/{id}", user_controller.GetTopUsers).Methods("GET")
 	userRouter.HandleFunc("/", user_controller.CreateUser).Methods("POST")
+	userRouter.HandleFunc("/friend/{id}", user_controller.GetFriendById).Methods("GET")
 }
