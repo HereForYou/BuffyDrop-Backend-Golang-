@@ -2,7 +2,7 @@ package models
 
 import (
 	"time"
-	// "go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type Friend struct {
@@ -11,9 +11,9 @@ type Friend struct {
 }
 
 type User struct {
-	// Id           primitive.ObjectID `bson:"_id"`
+	Id           primitive.ObjectID `bson:"_id"`
 	UserName     string    `bson:"userName"`
-	TotalPoints  float32   `bson:"totalPoints"`
+	TotalPoints  float64   `bson:"totalPoints"`
 	TgId         string    `bson:"tgId"`
 	FirstName    string    `bson:"firstName"`
 	LastName     string    `bson:"lastName"`
