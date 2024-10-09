@@ -6,8 +6,8 @@ import (
 
 	"go-test/config"
 	"go-test/db"
-	"go-test/routes/setting"
-	"go-test/routes/user"
+	setting_router "go-test/routes/setting"
+	user_router "go-test/routes/user"
 	"net/http"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -50,25 +50,38 @@ func main() {
 		log.Fatal(err)
 	}
 
-	for update := range updates {
-		if update.Message == nil {
-			continue
-		}
+	go func() {
+		for update := range updates {
+			if update.Message == nil {
+				continue
+			}
 
-		log.Println(update.Message.From.UserName, update.Message.Text)
+			log.Println("🟡 Request from ", update.Message.From.UserName, update.Message.Text)
 
-		switch update.Message.Text {
-		case "/start":
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Welcome to the Bot!")
-			bot.Send(msg)
-		case "/help":
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Here are the available commands:\n/start - Start the bot\n/help - Show help")
-			bot.Send(msg)
-		default:
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "I cann't understand that command!")
-			bot.Send(msg)
+			switch update.Message.Text {
+			case "/start":
+				desText := "This is SmartFox Bot written by Golang  🍖"
+				photo := tgbotapi.NewPhotoShare(update.Message.Chat.ID, "https://i.ibb.co/cvzgGD6/pic.png")
+				photo.Caption = desText
+				keyboard := tgbotapi.NewInlineKeyboardMarkup(
+					tgbotapi.NewInlineKeyboardRow(
+						tgbotapi.NewInlineKeyboardButtonURL("Let's Go", "https://t.me/gosmartfoxbot"),
+						tgbotapi.NewInlineKeyboardButtonURL("Join Smart Community", "https://t.me/gosmartfoxbot"),
+					),
+				)
+				photo.ReplyMarkup = keyboard
+				if _, err := bot.Send(photo); err != nil {
+					log.Println("Error", err)
+				}
+			case "/help":
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Here are the available commands:\n/start - Start the bot\n/help - Show help")
+				bot.Send(msg)
+			default:
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "I can't understand that command!")
+				bot.Send(msg)
+			}
 		}
-	}
+	}()
 
 	fmt.Println("Server is running on port: ", cfg.Port)
 	http.ListenAndServe(":"+cfg.Port, router)

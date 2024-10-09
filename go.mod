@@ -3,6 +3,7 @@ module go-test
 go 1.23.2
 
 require (
+	github.com/go-ozzo/ozzo-routing/v2 v2.4.0 // indirect
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
