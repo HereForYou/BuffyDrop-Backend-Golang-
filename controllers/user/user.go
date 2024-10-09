@@ -2,26 +2,95 @@ package user_controller
 
 import (
 	"context"
+	// "encoding/json"
 	"fmt"
 	"go-test/db"
 	"go-test/models"
+	// "io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
 
+	// routing "github.com/go-ozzo/ozzo-routing/v2"
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+type GetUserRequest struct {
+	FirstName  string `json:"firstName"`
+	LastName   string `json:"lastName"`
+	UserName   string `json:"userName"`
+	StartParam string `json:"start_param"`
+	Style      string `json:"style"`
+}
+
 func GetUser(w http.ResponseWriter, r *http.Request) {
+	//======================================================================== Get the tgId from params
+	vars := mux.Vars(r)
+	tgId := vars["id"]
+	inviteLink := tgId
+	fmt.Println("This is telegram Id", inviteLink)
+
+	//======================================================================== Get data from request
+	// body, err := ioutil.ReadAll(r.Body)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
+	// fmt.Println(string(body))
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	log.Println("This is form", r.FormValue("userName"))
+	req := GetUserRequest{
+		UserName:   r.FormValue("userName"),
+		FirstName:  r.FormValue("firstName"),
+		LastName:   r.FormValue("lastName"),
+		StartParam: r.FormValue("start_param"),
+		Style:      r.FormValue("style"),
+	}
+
+	log.Println("This is request: ", req)
+
+	// err = json.NewDecoder(r.Body).Decode(&req)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusBadRequest)
+	// 	return
+	// }
+
+	// err = json.Unmarshal(body, &req)
+	// if err != nil {
+	//     http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
+	//     return
+	// }
+
+	// var c routing.Context
+	// if err = c.Read(&req); err != nil {
+	// 	http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
+	// 	return
+	// }
+
+	// fmt.Println("This is req.data", req.UserName)
+	//======================================================================== Connecting to user collection of BuffyDrop database
 	client := db.Client
-	collection := client.Database("BuffyDrop").Collection("user")
+	userCollection := client.Database("BuffyDrop").Collection("user")
+	settingCollection := client.Database("BuffyDrop").Collection("setting")
 
 	var user models.User
+	var setting models.Setting
+	err := settingCollection.FindOne(context.TODO(), bson.D{}).Decode(&setting)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			fmt.Println("No document found")
+		} else {
+			log.Fatal(err)
+		}
+	}
 
-	err := collection.FindOne(context.TODO(), bson.D{{"tgId", "7202566339"}}).Decode(&user)
+	err = userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			fmt.Println("No document found")

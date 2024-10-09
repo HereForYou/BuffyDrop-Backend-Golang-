@@ -8,4 +8,5 @@ import (
 func RegisterUserRoute(r *mux.Router) {
 	settingRouter := r.PathPrefix("/setting").Subrouter()
 	settingRouter.HandleFunc("", setting_controller.SetSetting).Methods("GET")
+	settingRouter.HandleFunc("/all", setting_controller.GetAllSetting).Methods("GET")
 }
