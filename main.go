@@ -6,12 +6,13 @@ import (
 
 	"go-test/config"
 	"go-test/db"
-	setting_router "go-test/routes/setting"
-	user_router "go-test/routes/user"
+	"go-test/routes/setting"
+	"go-test/routes/user"
 	"net/http"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 )
 
 type User struct {
@@ -22,7 +23,7 @@ type User struct {
 }
 
 func main() {
-	// load configuration data from config package
+	//================================================================================== load configuration data from config package
 	cfg := config.LoadConfig()
 
 	//================================================================================== setting router
@@ -83,6 +84,17 @@ func main() {
 		}
 	}()
 
+	//===================================================================================== CORS configuration
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173", "http://foo.com:8080"},
+		AllowCredentials: true,
+		// Enable Debugging for testing, consider disabling in production
+		Debug: true,
+	})
+
 	fmt.Println("Server is running on port: ", cfg.Port)
-	http.ListenAndServe(":"+cfg.Port, router)
+	err = http.ListenAndServe(":"+cfg.Port, c.Handler(router))
+	if err != nil {
+		fmt.Println(err)
+	}
 }

@@ -2,10 +2,13 @@ package user_controller
 
 import (
 	"context"
-	// "encoding/json"
+	"time"
+
+	"encoding/json"
 	"fmt"
 	"go-test/db"
 	"go-test/models"
+
 	// "io/ioutil"
 	"log"
 	"net/http"
@@ -26,6 +29,15 @@ type GetUserRequest struct {
 	Style      string `json:"style"`
 }
 
+type GetUserResponse struct {
+	User       models.User `json:"user"`
+	SignIn     bool        `json:"signIn"`
+	RemainTime float32     `json:"remainTime"`
+	CycleTime  float32     `json:"cycleTime"`
+}
+
+var cycleTime = 10
+
 func GetUser(w http.ResponseWriter, r *http.Request) {
 	//======================================================================== Get the tgId from params
 	vars := mux.Vars(r)
@@ -33,27 +45,104 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 	inviteLink := tgId
 	fmt.Println("This is telegram Id", inviteLink)
 
-	//======================================================================== Get data from request
+	//======================================================================== Get data from POST request (Content-Type == x-www-form-urlencoded)
+	// if err := r.ParseForm(); err != nil {
+	// 	http.Error(w, err.Error(), http.StatusBadRequest)
+	// 	return
+	// }
+	// req := GetUserRequest{
+	// 	UserName:   r.FormValue("userName"),
+	// 	FirstName:  r.FormValue("firstName"),
+	// 	LastName:   r.FormValue("lastName"),
+	// 	StartParam: r.FormValue("start_param"),
+	// 	Style:      r.FormValue("style"),
+	// }
+
+	//======================================================================== Get data from POST request (Content-Type == application/json)
+	var req GetUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+
+	//======================================================================== Connecting to user and setting collection of BuffyDrop database
+	client := db.Client
+	userCollection := client.Database("BuffyDrop").Collection("user")
+	settingCollection := client.Database("BuffyDrop").Collection("setting")
+
+	var user models.User
+	var setting models.Setting
+	err := settingCollection.FindOne(context.TODO(), bson.D{}).Decode(&setting)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			fmt.Println("No document found")
+		} else {
+			log.Fatal(err)
+		}
+	}
+
+	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
+		if err == mongo.ErrNoDocuments {
+			fmt.Println("No document found")
+		} else {
+			log.Fatal(err)
+		}
+	}
+
+	if user.TgId != "" {
+		//=================================================================================================== Calculate elapsed time since start farming
+		start, err := time.Parse("2006-01-02 15:04:05.000 -0700 MST", user.StartFarming.String())
+		if err != nil {
+			fmt.Println("Error parsing date:", err)
+			return
+		}
+		now := time.Now()
+		countTime := now.Sub(start).Seconds()
+
+		if countTime > float64(cycleTime) {
+			user.Cliamed = false
+			_, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{
+				"$set": user,
+			})
+			if err != nil {
+				http.Error(w, "Internal Server Error: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			response := GetUserResponse{
+				User:       user,
+				SignIn:     true,
+				RemainTime: 0,
+				CycleTime:  float32(cycleTime),
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				http.Error(w, "Internal Server Error: "+err.Error(), http.StatusBadRequest)
+			}
+		} else {
+			response := GetUserResponse{
+				SignIn:     true,
+				RemainTime: float32(countTime),
+				CycleTime:  float32(cycleTime),
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				http.Error(w, "Internal Server Error: "+err.Error(), http.StatusBadRequest)
+			}
+		}
+	} else {
+		
+		log.Println("No document!")
+	}
+
+	//======================================================================== Get data from request (Tried according to GPT and Google)
 	// body, err := ioutil.ReadAll(r.Body)
 	// if err != nil {
 	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
 	// 	return
 	// }
 	// fmt.Println(string(body))
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	log.Println("This is form", r.FormValue("userName"))
-	req := GetUserRequest{
-		UserName:   r.FormValue("userName"),
-		FirstName:  r.FormValue("firstName"),
-		LastName:   r.FormValue("lastName"),
-		StartParam: r.FormValue("start_param"),
-		Style:      r.FormValue("style"),
-	}
-
-	log.Println("This is request: ", req)
 
 	// err = json.NewDecoder(r.Body).Decode(&req)
 	// if err != nil {
@@ -74,32 +163,6 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 	// }
 
 	// fmt.Println("This is req.data", req.UserName)
-	//======================================================================== Connecting to user collection of BuffyDrop database
-	client := db.Client
-	userCollection := client.Database("BuffyDrop").Collection("user")
-	settingCollection := client.Database("BuffyDrop").Collection("setting")
-
-	var user models.User
-	var setting models.Setting
-	err := settingCollection.FindOne(context.TODO(), bson.D{}).Decode(&setting)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			fmt.Println("No document found")
-		} else {
-			log.Fatal(err)
-		}
-	}
-
-	err = userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			fmt.Println("No document found")
-		} else {
-			log.Fatal(err)
-		}
-	}
-
-	fmt.Fprintf(w, user.UserName)
 }
 
 func GetTopUsers(w http.ResponseWriter, r *http.Request) {
