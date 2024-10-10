@@ -362,3 +362,118 @@ func GetFriendById(w http.ResponseWriter, r *http.Request) {
 func CreateUser(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, "This is user controller create user")
 }
+
+func ClaimFarming(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	tgId := vars["id"]
+	fmt.Println("This is telegram Id for ClaimFarming function", tgId)
+
+	client := db.Client
+	userCollection := client.Database("BuffyDrop").Collection("user")
+	settingCollection := client.Database("BuffyDrop").Collection("setting")
+
+	var user models.User
+	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while finding user by TG id", http.StatusBadRequest)
+	}
+	var setting models.Setting
+	if err := settingCollection.FindOne(context.TODO(), bson.D{}).Decode(&setting); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while finding setting", http.StatusBadRequest)
+	}
+
+	user.TotalPoints += setting.DailyRevenue * float64(cycleTime)
+	user.Cliamed = true
+	user.IsStarted = false
+
+	if _, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{"$set": user}); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while saving user by TG id", http.StatusBadRequest)
+	}
+
+	if err := json.NewEncoder(w).Encode(struct {
+		Status     bool        `json:"status"`
+		User       models.User `json:"user"`
+		RemainTime float32     `json:"remainTime"`
+	}{
+		Status:     true,
+		User:       user,
+		RemainTime: float32(cycleTime),
+	}); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
+	}
+}
+
+func StartFarming(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	tgId := vars["id"]
+	fmt.Println("This is telegram Id for StartFarming functioin", tgId)
+
+	//=========================================================================================================================== Connection DB
+	client := db.Client
+	userCollection := client.Database("BuffyDrop").Collection("user")
+
+	var user models.User
+	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
+		if err == mongo.ErrNoDocuments {
+			fmt.Println("No documents in database by telegram Id")
+			http.Error(w, "Invalid user", http.StatusBadRequest)
+			return
+		} else {
+			log.Fatal(err)
+		}
+	}
+	fmt.Println("This is user", user.UserName)
+
+	user.StartFarming = time.Now()
+	user.Cliamed = true
+	user.IsStarted = true
+
+	if _, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{"$set": user}); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while updating user documnet", http.StatusBadRequest)
+	}
+	fmt.Println("Successfully saved!")
+
+	if err := json.NewEncoder(w).Encode(struct {
+		User      models.User `json:"user"`
+		CycleTime int         `json:"cycleTime"`
+	}{User: user, CycleTime: cycleTime}); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
+	}
+}
+
+func EndFarming(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	tgId := vars["id"]
+	fmt.Println("This is TG id", tgId)
+
+	client := db.Client
+	userCollection := client.Database("BuffyDrop").Collection("user")
+
+	var user models.User
+	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while finding user", http.StatusBadRequest)
+	}
+
+	user.Cliamed = false
+	if _, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{"$set": user}); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while saving user", http.StatusBadRequest)
+	}
+
+	if err := json.NewEncoder(w).Encode(struct {
+		User      models.User `json:"user"`
+		CycleTime int         `json:"cycleTime"`
+	}{
+		User:      user,
+		CycleTime: cycleTime,
+	}); err != nil {
+		log.Fatal(err)
+		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
+	}
+}
