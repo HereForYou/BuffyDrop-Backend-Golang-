@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go-test/db"
 	"go-test/models"
+	"go-test/utils"
 
 	// "io/ioutil"
 	"log"
@@ -77,20 +78,22 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		if err == mongo.ErrNoDocuments {
 			fmt.Println("No document found")
 		} else {
-			log.Fatal(err)
+			log.Fatal("🔴 " + err.Error())
 		}
 	}
 
+	//======================================================================== Finding user by telegram Id
 	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
 		if err == mongo.ErrNoDocuments {
-			fmt.Println("No document found")
+			fmt.Println("No document found in user collection by telegram Id from request")
 		} else {
-			log.Fatal(err)
+			log.Fatal("🔴 " + err.Error())
 		}
 	}
 
+	//======================================================================== If user exists in database
 	if user.TgId != "" {
-		//=================================================================================================== Calculate elapsed time since start farming
+		//======================================================================================================================== Calculate elapsed time since start farming
 		start, err := time.Parse("2006-01-02 15:04:05.000 -0700 MST", user.StartFarming.String())
 		if err != nil {
 			fmt.Println("Error parsing date:", err)
@@ -99,6 +102,7 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		countTime := now.Sub(start).Seconds()
 
+		//======================================================================================================================== If farming is ended
 		if countTime > float64(cycleTime) {
 			user.Cliamed = false
 			_, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{
@@ -119,6 +123,7 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 			if err := json.NewEncoder(w).Encode(response); err != nil {
 				http.Error(w, "Internal Server Error: "+err.Error(), http.StatusBadRequest)
 			}
+			//======================================================================================================================== while farming
 		} else {
 			response := GetUserResponse{
 				SignIn:     true,
@@ -131,38 +136,117 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Internal Server Error: "+err.Error(), http.StatusBadRequest)
 			}
 		}
+		//============================================================================================================================ If user does not exist in database (when user is new)
 	} else {
-		
-		log.Println("No document!")
+		inviteRevenue := setting.InviteRevenue
+		rankCount, err := userCollection.CountDocuments(context.TODO(), bson.D{})
+		if err != nil {
+			http.Error(w, "Internal Server Error -> counting documents in user collection", http.StatusBadRequest)
+		}
+		totalPoints := rankCount + 1
+
+		//======================================================================================================================== When user is invited
+		if req.StartParam != "" {
+			var inviter models.User
+			if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", req.StartParam}}).Decode(&inviter); err != nil {
+				if err == mongo.ErrNoDocuments {
+					log.Println("No document found in user collection by start_param")
+					http.Error(w, "Unauthorized invitation link", http.StatusBadRequest)
+				} else {
+					log.Fatal("Error: finding iniviter by start_param: ", err)
+				}
+			}
+
+			newUser := models.User{
+				TgId:         tgId,
+				UserName:     req.UserName,
+				FirstName:    req.FirstName,
+				LastName:     req.LastName,
+				IsInvited:    true,
+				InviteLink:   tgId,
+				TotalPoints:  float64(totalPoints),
+				JoinRank:     int(totalPoints),
+				Style:        req.Style,
+				StartFarming: time.Now(),
+				LastLogin:    time.Now(),
+			}
+			_, err := userCollection.InsertOne(context.TODO(), newUser)
+			if err != nil {
+				log.Fatal("🔴 " + err.Error())
+				http.Error(w, "Internal Server Error while inserting new user", http.StatusBadRequest)
+			}
+
+			if !utils.HasFriendWithId(inviter.Friends, newUser.TgId) {
+				inviter.Friends = append(inviter.Friends, models.Friend{Id: newUser.TgId, Revenue: inviteRevenue * newUser.TotalPoints})
+				inviter.TotalPoints += inviteRevenue * newUser.TotalPoints
+				if len(inviter.Friends) != 0 && len(inviter.Friends)%3 == 0 {
+					inviter.TotalPoints += 200000
+				}
+				if _, err := userCollection.UpdateByID(context.TODO(), inviter.Id, bson.M{
+					"$set": inviter,
+				}); err != nil {
+					log.Fatal("🔴 " + err.Error())
+					http.Error(w, "Internal Server Error while updating the inviter", http.StatusBadRequest)
+				}
+			}
+
+			//======================================================================================================================== Sending response to client
+			if err := json.NewEncoder(w).Encode(GetUserResponse{User: newUser, SignIn: false, RemainTime: 0, CycleTime: float32(cycleTime)}); err != nil {
+				log.Fatal("🔴 " + err.Error())
+				http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
+			}
+			//======================================================================================================================== When user is not invited and is new user
+		} else {
+			newUser := models.User{
+				TgId:         tgId,
+				UserName:     req.UserName,
+				FirstName:    req.FirstName,
+				LastName:     req.LastName,
+				InviteLink:   tgId,
+				TotalPoints:  float64(totalPoints),
+				JoinRank:     int(totalPoints),
+				Style:        req.Style,
+				StartFarming: time.Now(),
+				LastLogin:    time.Now(),
+			}
+
+			if _, err := userCollection.InsertOne(context.TODO(), newUser); err != nil {
+				log.Fatal("🔴 " + err.Error())
+				http.Error(w, "Internal Server Error while saving new user into mongoDB", http.StatusBadRequest)
+			}
+
+			var reward float64
+			if totalPoints < 11 {
+				reward = 0.1001
+			} else if totalPoints < 101 {
+				reward = 0.1
+			} else if totalPoints < 1001 {
+				reward = 0.096
+			} else if totalPoints < 10001 {
+				reward = 0.0949
+			} else if totalPoints < 100001 {
+				reward = 0.065
+			} else if totalPoints < 1000001 {
+				reward = 0.019
+			} else {
+				reward = float64(totalPoints) * 0.01
+			}
+			log.Println("This is reward -> ", reward)
+			setting.InviteRevenue = reward
+
+			if _, err := settingCollection.UpdateOne(context.TODO(), bson.D{{"taskList", setting.TaskList}}, bson.M{
+				"$set": setting,
+			}); err != nil {
+				log.Fatal("🔴 " + err.Error())
+				http.Error(w, "Internal Server Error while saving setting", http.StatusBadRequest)
+			}
+
+			if err := json.NewEncoder(w).Encode(GetUserResponse{User: newUser, SignIn: false, RemainTime: 0, CycleTime: float32(cycleTime)}); err != nil {
+				log.Fatal("🔴 " + err.Error())
+				http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
+			}
+		}
 	}
-
-	//======================================================================== Get data from request (Tried according to GPT and Google)
-	// body, err := ioutil.ReadAll(r.Body)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
-	// fmt.Println(string(body))
-
-	// err = json.NewDecoder(r.Body).Decode(&req)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusBadRequest)
-	// 	return
-	// }
-
-	// err = json.Unmarshal(body, &req)
-	// if err != nil {
-	//     http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
-	//     return
-	// }
-
-	// var c routing.Context
-	// if err = c.Read(&req); err != nil {
-	// 	http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
-	// 	return
-	// }
-
-	// fmt.Println("This is req.data", req.UserName)
 }
 
 func GetTopUsers(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +281,7 @@ func GetTopUsers(w http.ResponseWriter, r *http.Request) {
 	// Get all users according to filter and sort
 	cursor, err := collection.Find(context.TODO(), bson.D{}, findOptions.SetProjection(projection))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴 " + err.Error())
 	}
 	defer cursor.Close(context.TODO())
 
@@ -206,28 +290,28 @@ func GetTopUsers(w http.ResponseWriter, r *http.Request) {
 	for cursor.Next(context.TODO()) {
 		var tempUser models.User
 		if err := cursor.Decode(&tempUser); err != nil {
-			log.Fatal(err)
+			log.Fatal("🔴 " + err.Error())
 		}
 		users = append(users, tempUser)
 	}
 	if err := cursor.Err(); err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴 " + err.Error())
 	}
 
 	var curUser models.User
 	err = collection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}, options.FindOne().SetProjection(projection)).Decode(&curUser)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴 " + err.Error())
 	}
 
 	totalMembers, err := collection.CountDocuments(context.TODO(), bson.D{})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴 " + err.Error())
 	}
 
 	ranking, err := collection.CountDocuments(context.TODO(), bson.D{{"totalPoints", bson.D{{"$gt", curUser.TotalPoints}}}})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴 " + err.Error())
 	}
 
 	fmt.Fprint(w, "Top Users: ", users, "\n", curUser, totalMembers, ranking)
@@ -243,7 +327,7 @@ func GetFriendById(w http.ResponseWriter, r *http.Request) {
 	var curUser models.User
 	err := collection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&curUser)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴 " + err.Error())
 	}
 
 	var friendIds []string
@@ -259,7 +343,7 @@ func GetFriendById(w http.ResponseWriter, r *http.Request) {
 	}
 	cursor, err := collection.Find(context.TODO(), bson.D{{"_id", bson.D{{"$in", curUser.Friends}}}}, options.Find().SetProjection(projection))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴 " + err.Error())
 	}
 	defer cursor.Close(context.TODO())
 
@@ -267,7 +351,7 @@ func GetFriendById(w http.ResponseWriter, r *http.Request) {
 	for cursor.Next(context.TODO()) {
 		var tempUser models.User
 		if err := cursor.Decode(&tempUser); err != nil {
-			log.Fatal(err)
+			log.Fatal("🔴 " + err.Error())
 		}
 		users = append(users, tempUser)
 	}

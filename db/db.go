@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"log"
+
 	// "time"
 
 	"go.mongodb.org/mongo-driver/mongo"
@@ -26,5 +28,5 @@ func Connect(uri string) {
 		log.Fatal(err)
 	}
 
-	log.Println("Connected to MongoDB")
+	fmt.Println("🔵 Connected to MongoDB")
 }

@@ -24,7 +24,7 @@ func GetAllSetting(w http.ResponseWriter, r *http.Request) {
 	var setting models.Setting
 	err := collection.FindOne(context.TODO(), bson.D{}).Decode(&setting)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴 "+err.Error())
 	}
 
 	if r.Method == http.MethodOptions {
