@@ -38,17 +38,17 @@ func main() {
 	botToken := cfg.BotToken
 	bot, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴" + err.Error())
 	}
 
-	fmt.Println("Successfully set the bot", bot.Self.UserName)
+	fmt.Println("🔵 Successfully set the bot", bot.Self.UserName)
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 10
 
 	updates, err := bot.GetUpdatesChan(u)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("🔴" + err.Error())
 	}
 
 	go func() {
@@ -92,9 +92,9 @@ func main() {
 		Debug: true,
 	})
 
-	fmt.Println("Server is running on port: ", cfg.Port)
+	fmt.Println("🔵 Server is running on port: ", cfg.Port)
 	err = http.ListenAndServe(":"+cfg.Port, c.Handler(router))
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("🔴 " + err.Error())
 	}
 }
