@@ -24,12 +24,12 @@ func GetAllSetting(w http.ResponseWriter, r *http.Request) {
 	var setting models.Setting
 	err := collection.FindOne(context.TODO(), bson.D{}).Decode(&setting)
 	if err != nil {
-		log.Fatal("🔴 "+err.Error())
+		log.Fatal("🔴 " + err.Error())
 	}
 
 	if r.Method == http.MethodOptions {
 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Requested-With")
 		w.WriteHeader(http.StatusNoContent) // No content for preflight
 		return
