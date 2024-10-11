@@ -1,24 +1,12 @@
 package utils
 
 import (
-	"fmt"
 	"go-test/models"
 	"reflect"
 	"regexp"
 )
 
-func SayHello(name string) {
-	fmt.Println("Hello, ", name)
-}
-
-func FindEvens(nums int) {
-	for i := 0; i < nums; i++ {
-		if i%2 == 0 {
-			fmt.Println(i)
-		}
-	}
-}
-
+// Function to check if the friends array contains id
 func HasFriendWithId(friends []models.Friend, id string) bool {
 	for _, friend := range friends {
 		if friend.Id == id {

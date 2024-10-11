@@ -6,8 +6,8 @@ import (
 
 	"go-test/config"
 	"go-test/db"
-	"go-test/routes/setting"
-	"go-test/routes/user"
+	setting_router "go-test/routes/setting"
+	user_router "go-test/routes/user"
 	"net/http"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
@@ -86,7 +86,8 @@ func main() {
 
 	//===================================================================================== CORS configuration
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:5173", "http://foo.com:8080"},
+		AllowedHeaders:   []string{"ngrok-skip-browser-warning", "Content-Type", "Authorization"},
+		AllowedOrigins:   []string{"http://localhost:5173", "http://foo.com:8080", "https://telegram-mini-app-cyan.vercel.app"},
 		AllowCredentials: true,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		// Enable Debugging for testing, consider disabling in production
