@@ -78,16 +78,16 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		if err == mongo.ErrNoDocuments {
 			fmt.Println("No document found")
 		} else {
-			log.Fatal("🔴 " + err.Error())
+			log.Printf("🔴 Error finding setting" + err.Error())
 		}
 	}
 
 	//======================================================================== Finding user by telegram Id
-	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
+	if err := userCollection.FindOne(context.TODO(), bson.M{"tgId": tgId}).Decode(&user); err != nil {
 		if err == mongo.ErrNoDocuments {
-			fmt.Println("No document found in user collection by telegram Id from request")
+			log.Printf("No document found in user collection by telegram Id from request: %s", tgId)
 		} else {
-			log.Fatal("🔴 " + err.Error())
+			log.Printf("🔴 Error while finding document: %v" + err.Error())
 		}
 	}
 
@@ -96,7 +96,7 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		//======================================================================================================================== Calculate elapsed time since start farming
 		nomarlizedDateStr, err := utils.NormalizeDateString(user.StartFarming.String())
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("🔴 Error normalizing date" + err.Error())
 			return
 		}
 
@@ -111,7 +111,7 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		//======================================================================================================================== If farming is ended
 		if countTime > float64(cycleTime) {
 			user.Cliamed = false
-			_, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{
+			_, err := userCollection.UpdateOne(context.TODO(), bson.M{"tgId": tgId}, bson.M{
 				"$set": user,
 			})
 			if err != nil {
@@ -155,12 +155,12 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 		//======================================================================================================================== When user is invited
 		if req.StartParam != "" {
 			var inviter models.User
-			if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", req.StartParam}}).Decode(&inviter); err != nil {
+			if err := userCollection.FindOne(context.TODO(), bson.M{"tgId": req.StartParam}).Decode(&inviter); err != nil {
 				if err == mongo.ErrNoDocuments {
 					log.Println("No document found in user collection by start_param")
 					http.Error(w, "Unauthorized invitation link", http.StatusBadRequest)
 				} else {
-					log.Fatal("Error: finding iniviter by start_param: ", err)
+					log.Printf("Error: finding iniviter by start_param: %v", err.Error())
 				}
 			}
 
@@ -181,7 +181,7 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 			}
 			_, err := userCollection.InsertOne(context.TODO(), newUser)
 			if err != nil {
-				log.Fatal("🔴 " + err.Error())
+				log.Printf("🔴 " + err.Error())
 				http.Error(w, "Internal Server Error while inserting new user", http.StatusBadRequest)
 			}
 
@@ -194,14 +194,14 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 				if _, err := userCollection.UpdateByID(context.TODO(), inviter.Id, bson.M{
 					"$set": inviter,
 				}); err != nil {
-					log.Fatal("🔴 " + err.Error())
+					log.Printf("🔴 " + err.Error())
 					http.Error(w, "Internal Server Error while updating the inviter", http.StatusBadRequest)
 				}
 			}
 
 			//======================================================================================================================== Sending response to client
 			if err := json.NewEncoder(w).Encode(GetUserResponse{User: newUser, SignIn: false, RemainTime: 0, CycleTime: float32(cycleTime)}); err != nil {
-				log.Fatal("🔴 " + err.Error())
+				log.Printf("🔴 " + err.Error())
 				http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
 			}
 			//======================================================================================================================== When user is not invited and is new user
@@ -222,8 +222,9 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if _, err := userCollection.InsertOne(context.TODO(), newUser); err != nil {
-				log.Fatal("🔴 " + err.Error())
-				http.Error(w, "Internal Server Error while saving new user into mongoDB", http.StatusBadRequest)
+				log.Printf("🔴 Error inserting new user: %v" + err.Error())
+				http.Error(w, "Internal Server Error while saving new user into mongoDB", http.StatusInternalServerError)
+				return
 			}
 
 			var reward float64
@@ -245,15 +246,15 @@ func GetUser(w http.ResponseWriter, r *http.Request) {
 			log.Println("This is reward -> ", reward)
 			setting.InviteRevenue = reward
 
-			if _, err := settingCollection.UpdateOne(context.TODO(), bson.D{{"taskList", setting.TaskList}}, bson.M{
+			if _, err := settingCollection.UpdateOne(context.TODO(), bson.M{"taskList": setting.TaskList}, bson.M{
 				"$set": setting,
 			}); err != nil {
-				log.Fatal("🔴 " + err.Error())
+				log.Printf("🔴 " + err.Error())
 				http.Error(w, "Internal Server Error while saving setting", http.StatusBadRequest)
 			}
 
 			if err := json.NewEncoder(w).Encode(GetUserResponse{User: newUser, SignIn: false, RemainTime: 0, CycleTime: float32(cycleTime)}); err != nil {
-				log.Fatal("🔴 " + err.Error())
+				log.Printf("🔴 " + err.Error())
 				http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
 			}
 		}
@@ -278,21 +279,21 @@ func GetTopUsers(w http.ResponseWriter, r *http.Request) {
 
 	// Set the filter to find the users and sort by totalPoints
 	findOptions := options.Find()
-	findOptions.SetSort(bson.D{{"totalPoints", -1}})
+	findOptions.SetSort(bson.M{"totalPoints": -1})
 	findOptions.SetLimit(int64(numUsers))
 
 	// Return only bottom fields
-	projection := bson.D{
-		{"totalPoints", 1},
-		{"userName", 1},
-		{"tgId", 1},
-		{"style", 1},
+	projection := bson.M{
+		"totalPoints": 1,
+		"userName":    1,
+		"tgId":        1,
+		"style":       1,
 	}
 
 	// Get all users according to filter and sort
 	cursor, err := collection.Find(context.TODO(), bson.D{}, findOptions.SetProjection(projection))
 	if err != nil {
-		log.Fatal("🔴 " + err.Error())
+		log.Printf("🔴 " + err.Error())
 	}
 	defer cursor.Close(context.TODO())
 
@@ -301,28 +302,28 @@ func GetTopUsers(w http.ResponseWriter, r *http.Request) {
 	for cursor.Next(context.TODO()) {
 		var tempUser models.User
 		if err := cursor.Decode(&tempUser); err != nil {
-			log.Fatal("🔴 " + err.Error())
+			log.Printf("🔴 " + err.Error())
 		}
 		users = append(users, tempUser)
 	}
 	if err := cursor.Err(); err != nil {
-		log.Fatal("🔴 " + err.Error())
+		log.Printf("🔴 " + err.Error())
 	}
 
 	var curUser models.User
-	err = collection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}, options.FindOne().SetProjection(projection)).Decode(&curUser)
+	err = collection.FindOne(context.TODO(), bson.M{"tgId": tgId}, options.FindOne().SetProjection(projection)).Decode(&curUser)
 	if err != nil {
-		log.Fatal("🔴 " + err.Error())
+		log.Printf("🔴 " + err.Error())
 	}
 
 	totalMembers, err := collection.CountDocuments(context.TODO(), bson.D{})
 	if err != nil {
-		log.Fatal("🔴 " + err.Error())
+		log.Printf("🔴 " + err.Error())
 	}
 
-	ranking, err := collection.CountDocuments(context.TODO(), bson.D{{"totalPoints", bson.D{{"$gt", curUser.TotalPoints}}}})
+	ranking, err := collection.CountDocuments(context.TODO(), bson.M{"totalPoints": bson.M{"$gt": curUser.TotalPoints}})
 	if err != nil {
-		log.Fatal("🔴 " + err.Error())
+		log.Printf("🔴 " + err.Error())
 	}
 
 	if err := json.NewEncoder(w).Encode(struct {
@@ -336,7 +337,7 @@ func GetTopUsers(w http.ResponseWriter, r *http.Request) {
 		TotalMembers: int(totalMembers),
 		Ranking:      int(ranking + 1),
 	}); err != nil {
-		log.Fatal(err)
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
 	}
 }
@@ -349,9 +350,9 @@ func GetFriendById(w http.ResponseWriter, r *http.Request) {
 	tgId := vars["id"]
 
 	var curUser models.User
-	err := collection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&curUser)
+	err := collection.FindOne(context.TODO(), bson.M{"tgId": tgId}).Decode(&curUser)
 	if err != nil {
-		log.Fatal("🔴 " + err.Error())
+		log.Printf("🔴 " + err.Error())
 	}
 
 	var friendIds []string
@@ -360,16 +361,16 @@ func GetFriendById(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("FriendIds", friendIds)
 
-	projection := bson.D{
-		{"totalPoints", 1},
-		{"userName", 1},
-		{"tgId", 1},
-		{"style", 1},
-		{"revenue", 1},
+	projection := bson.M{
+		"totalPoints": 1,
+		"userName":    1,
+		"tgId":        1,
+		"style":       1,
+		"revenue":     1,
 	}
-	friends, err := collection.Find(context.TODO(), bson.D{{"tgId", bson.D{{"$in", friendIds}}}}, options.Find().SetProjection(projection))
+	friends, err := collection.Find(context.TODO(), bson.M{"tgId": bson.M{"$in": friendIds}}, options.Find().SetProjection(projection))
 	if err != nil {
-		log.Fatal("🔴 " + err.Error())
+		log.Printf("🔴 " + err.Error())
 	}
 	defer friends.Close(context.TODO())
 
@@ -380,7 +381,7 @@ func GetFriendById(w http.ResponseWriter, r *http.Request) {
 	for friends.Next(context.TODO()) {
 		var tempUser models.User
 		if err := friends.Decode(&tempUser); err != nil {
-			log.Fatal("🔴 " + err.Error())
+			log.Printf("🔴 " + err.Error())
 		}
 		for _, friend := range curUser.Friends {
 			if friend.Id == tempUser.TgId {
@@ -402,7 +403,7 @@ func GetFriendById(w http.ResponseWriter, r *http.Request) {
 		InviteLink:  curUser.InviteLink,
 		FriendsInfo: users,
 	}); err != nil {
-		log.Fatal(err)
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
 	}
 }
@@ -421,13 +422,13 @@ func ClaimFarming(w http.ResponseWriter, r *http.Request) {
 	settingCollection := client.Database("BuffyDrop").Collection("setting")
 
 	var user models.User
-	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
-		log.Fatal(err)
+	if err := userCollection.FindOne(context.TODO(), bson.M{"tgId": tgId}).Decode(&user); err != nil {
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while finding user by TG id", http.StatusBadRequest)
 	}
 	var setting models.Setting
 	if err := settingCollection.FindOne(context.TODO(), bson.D{}).Decode(&setting); err != nil {
-		log.Fatal(err)
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while finding setting", http.StatusBadRequest)
 	}
 
@@ -435,8 +436,8 @@ func ClaimFarming(w http.ResponseWriter, r *http.Request) {
 	user.Cliamed = true
 	user.IsStarted = false
 
-	if _, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{"$set": user}); err != nil {
-		log.Fatal(err)
+	if _, err := userCollection.UpdateOne(context.TODO(), bson.M{"tgId": tgId}, bson.M{"$set": user}); err != nil {
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while saving user by TG id", http.StatusBadRequest)
 	}
 
@@ -449,7 +450,7 @@ func ClaimFarming(w http.ResponseWriter, r *http.Request) {
 		User:       user,
 		RemainTime: float32(cycleTime),
 	}); err != nil {
-		log.Fatal(err)
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
 	}
 }
@@ -464,13 +465,13 @@ func StartFarming(w http.ResponseWriter, r *http.Request) {
 	userCollection := client.Database("BuffyDrop").Collection("user")
 
 	var user models.User
-	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
+	if err := userCollection.FindOne(context.TODO(), bson.M{"tgId": tgId}).Decode(&user); err != nil {
 		if err == mongo.ErrNoDocuments {
 			fmt.Println("No documents in database by telegram Id")
 			http.Error(w, "Invalid user", http.StatusBadRequest)
 			return
 		} else {
-			log.Fatal(err)
+			log.Printf("🔴 " + err.Error())
 		}
 	}
 	fmt.Println("This is user", user.UserName)
@@ -479,8 +480,8 @@ func StartFarming(w http.ResponseWriter, r *http.Request) {
 	user.Cliamed = true
 	user.IsStarted = true
 
-	if _, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{"$set": user}); err != nil {
-		log.Fatal(err)
+	if _, err := userCollection.UpdateOne(context.TODO(), bson.M{"tgId": tgId}, bson.M{"$set": user}); err != nil {
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while updating user documnet", http.StatusBadRequest)
 	}
 	fmt.Println("Successfully saved!")
@@ -489,7 +490,7 @@ func StartFarming(w http.ResponseWriter, r *http.Request) {
 		User      models.User `json:"user"`
 		CycleTime int         `json:"cycleTime"`
 	}{User: user, CycleTime: cycleTime}); err != nil {
-		log.Fatal(err)
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
 	}
 }
@@ -503,14 +504,14 @@ func EndFarming(w http.ResponseWriter, r *http.Request) {
 	userCollection := client.Database("BuffyDrop").Collection("user")
 
 	var user models.User
-	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
-		log.Fatal(err)
+	if err := userCollection.FindOne(context.TODO(), bson.M{"tgId": tgId}).Decode(&user); err != nil {
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while finding user", http.StatusBadRequest)
 	}
 
 	user.Cliamed = false
-	if _, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{"$set": user}); err != nil {
-		log.Fatal(err)
+	if _, err := userCollection.UpdateOne(context.TODO(), bson.M{"tgId": tgId}, bson.M{"$set": user}); err != nil {
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while saving user", http.StatusBadRequest)
 	}
 
@@ -521,7 +522,7 @@ func EndFarming(w http.ResponseWriter, r *http.Request) {
 		User:      user,
 		CycleTime: cycleTime,
 	}); err != nil {
-		log.Fatal(err)
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
 	}
 }
@@ -535,8 +536,8 @@ func Tap(w http.ResponseWriter, req *http.Request) {
 	userCollection := client.Database("BuffyDrop").Collection("user")
 
 	var user models.User
-	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
-		log.Fatal(err)
+	if err := userCollection.FindOne(context.TODO(), bson.M{"tgId": tgId}).Decode(&user); err != nil {
+		log.Printf("🔴 " + err.Error())
 		if err == mongo.ErrNoDocuments {
 			http.Error(w, "User not found", http.StatusBadRequest)
 		} else {
@@ -546,8 +547,8 @@ func Tap(w http.ResponseWriter, req *http.Request) {
 
 	user.TotalPoints += 1
 
-	if _, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{"$set": user}); err != nil {
-		log.Fatal(err)
+	if _, err := userCollection.UpdateOne(context.TODO(), bson.M{"tgId": tgId}, bson.M{"$set": user}); err != nil {
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while saving user", http.StatusBadRequest)
 	}
 
@@ -558,7 +559,7 @@ func Tap(w http.ResponseWriter, req *http.Request) {
 		Status: true,
 		User:   user,
 	}); err != nil {
-		log.Fatal(err)
+		log.Printf("🔴 " + err.Error())
 		http.Error(w, "Internal Server Error while sending response to client", http.StatusBadRequest)
 	}
 }
@@ -582,8 +583,8 @@ func HandleFollow(w http.ResponseWriter, req *http.Request) {
 	userCollection := client.Database("BuffyDrop").Collection("user")
 
 	var user models.User
-	if err := userCollection.FindOne(context.TODO(), bson.D{{"tgId", tgId}}).Decode(&user); err != nil {
-		log.Fatal(err)
+	if err := userCollection.FindOne(context.TODO(), bson.M{"tgId": tgId}).Decode(&user); err != nil {
+		log.Printf("🔴 " + err.Error())
 		if err == mongo.ErrNoDocuments {
 			http.Error(w, "User not found", http.StatusBadRequest)
 		} else {
@@ -596,19 +597,19 @@ func HandleFollow(w http.ResponseWriter, req *http.Request) {
 		user.Task = append(user.Task, reqBody.Id)
 		user.TotalPoints += float64(reqBody.Profit)
 
-		if _, err := userCollection.UpdateOne(context.TODO(), bson.D{{"tgId", tgId}}, bson.M{"$set": user}); err != nil {
-			log.Fatal(err)
-			http.Error(w, "Internal Server Error", http.StatusBadRequest)
+		if _, err := userCollection.UpdateOne(context.TODO(), bson.M{"tgId": tgId}, bson.M{"$set": user}); err != nil {
+			log.Printf("🔴 " + err.Error())
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 
 		if err := json.NewEncoder(w).Encode(true); err != nil {
-			log.Fatal(err)
-			http.Error(w, "Internal Server Error", http.StatusBadRequest)
+			log.Printf("🔴 " + err.Error())
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 	} else {
 		if err := json.NewEncoder(w).Encode(false); err != nil {
-			log.Fatal(err)
-			http.Error(w, "Internal Server Error", http.StatusBadRequest)
+			log.Printf("🔴 " + err.Error())
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
 	}
 }

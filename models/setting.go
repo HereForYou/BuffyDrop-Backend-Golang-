@@ -1,7 +1,7 @@
 package models
 
 type TaskList struct {
-	Id     string `bson:"id" json:"id"`
+	Id     string `bson:"id" json:"id" validate:"required"`
 	Title  string `bson:"title" json:"title"`
 	Image  string `bson:"image" json:"image"`
 	Profit int32  `bson:"profit" json:"profit"`
@@ -9,7 +9,7 @@ type TaskList struct {
 }
 
 type Admin struct {
-	Id       int    `bson:"id" json:"id"`
+	Id       int    `bson:"id,omitempty" json:"id"`
 	Username string `bson:"username" json:"username"`
 }
 

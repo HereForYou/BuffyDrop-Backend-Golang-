@@ -12,10 +12,10 @@ type Friend struct {
 }
 
 type User struct {
-	Id           primitive.ObjectID `bson:"_id" json:"_id"`
+	Id           primitive.ObjectID `bson:"_id,omitempty" json:"_id"`
 	UserName     string             `bson:"userName" json:"userName"`
 	TotalPoints  float64            `bson:"totalPoints" json:"totalPoints"`
-	TgId         string             `bson:"tgId" json:"tgId"`
+	TgId         string             `bson:"tgId" json:"tgId" validate:"required"`
 	FirstName    string             `bson:"firstName" json:"firstName"`
 	LastName     string             `bson:"lastName" json:"lastName"`
 	CurPoints    float32            `bson:"curPoints" json:"curPoints"`
