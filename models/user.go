@@ -1,12 +1,13 @@
 package models
 
 import (
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type Friend struct {
-	Id      string  `bson:"id" json:"_id" validate:"required"`
+	Id      string  `bson:"id" json:"id" validate:"required"`
 	Revenue float64 `bson:"revenue,omitempty" json:"revenue"`
 }
 
@@ -29,7 +30,7 @@ type User struct {
 	IntervalId   int                `bson:"intervalId" json:"intervalId"`
 	JoinRank     int                `bson:"joinRank" json:"joinRank"`
 	Style        string             `bson:"style" json:"style"`
-	Friends      []Friend           `bson:"friends,omitempty" json:"friends"`
+	Friends      []Friend           `bson:"friends" json:"friends"`
 	// CreatedAt  string `bson:"createdAt"`
 	// UpdatedAt  string `bson:"updatedAt"`
 }
